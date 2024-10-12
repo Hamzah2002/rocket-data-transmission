@@ -1,84 +1,126 @@
 import socket
+import threading
 import time
 from generate_dummy_data import (
     generate_binary_sensor_data, generate_binary_airbrake_status,
     generate_binary_pms_data, generate_binary_fc_data, generate_binary_video_data
 )
 from packet import display_packet_info
-import sys
-import threading
 
 # Create a lock object to synchronize print statements
 print_lock = threading.Lock()  # This ensures that only one thread prints at a time to avoid mixed-up output
 
-def send_packet(packet, host='localhost', port=12345):
+# Function to send data using TCP for reliable transmission
+def send_tcp_packet(packet, host='localhost', port=12345):
     """
-    Sends a packet to the ground station via a simulated network connection.
+    Sends a packet to the ground station via a TCP connection.
+    TCP is reliable and ensures that data is delivered without errors.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        # Create a UDP socket and send the packet to the specified host and port
-        sock.sendto(packet, (host, port))
-
-        # Lock the print statements so that only one thread prints at a time
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect((host, port))  # Establish a TCP connection to the host and port
+        sock.sendall(packet)  # Send the entire packet over TCP
         with print_lock:
-            sys.stdout.flush()  # Ensure that any previous output is fully printed before starting new print
-            print("\n--- Sending Packet ---")
-            display_packet_info(packet, "Sent Packet")  # Display details about the sent packet
-            print("----------------------\n")
-            sys.stdout.flush()  # Flush output to ensure no overlap with other threads
+            print("\n--- Sending TCP Packet ---")
+            display_packet_info(packet, "Sent TCP Packet")  # Display packet details
+            print("--------------------------\n")
 
-def receive_packet(host='localhost', port=12345):
+
+# Function to send data using UDP for faster transmission (like video data)
+def send_udp_packet(packet, host='localhost', port=54321):
     """
-    Receives packets sent to the specified port, simulates a ground station receiving data.
+    Sends a packet to the ground station via a UDP connection.
+    UDP is faster but less reliable, making it good for video streaming.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        # Bind the socket to the given host and port to listen for incoming packets
-        sock.bind((host, port))
-        print(f"\nListening on {host}:{port}...\n")  # Notify that the program is listening for packets
+        sock.sendto(packet, (host, port))  # Send the packet using UDP
+        with print_lock:
+            print("\n--- Sending UDP Packet ---")
+            display_packet_info(packet, "Sent UDP Packet")  # Display packet details
+            print("--------------------------\n")
+
+
+# Function to receive TCP packets (sensor/control data)
+def receive_tcp_data(host='localhost', port=12345):
+    """
+    Receives TCP packets and processes them.
+    This function listens for incoming TCP connections and processes the packets received.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        server_sock.bind((host, port))  # Bind to the host and port to start listening for incoming connections
+        server_sock.listen(1)  # Start listening for incoming TCP connections
+        print(f"\nListening for TCP connections on {host}:{port}...\n")
 
         while True:
-            # Receive a packet (max size 1024 bytes) and get the address of the sender
-            packet, addr = sock.recvfrom(1024)
+            conn, addr = server_sock.accept()  # Accept a new TCP connection from a client
+            with conn:
+                packet = conn.recv(1024)  # Receive up to 1024 bytes of data from the connection
+                with print_lock:
+                    print(f"\n--- Received TCP Packet from {addr} ---")
+                    display_packet_info(packet, "Received TCP Packet")  # Display the packet details
+                    print("------------------------------\n")
 
-            # Lock print output so only one thread prints at a time
+
+# Function to receive UDP packets (video data)
+def receive_udp_data(host='localhost', port=54321):
+    """
+    Receives UDP packets and processes them.
+    This function listens for incoming UDP packets and processes them.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind((host, port))  # Bind to the host and port to start listening for UDP packets
+        print(f"\nListening for UDP packets on {host}:{port}...\n")
+
+        while True:
+            packet, addr = sock.recvfrom(1024)  # Receive up to 1024 bytes of data from a UDP packet
             with print_lock:
-                print(f"\n--- Received Packet from {addr} ---")  # Show where the packet came from
-                display_packet_info(packet, "Received Packet")  # Display details of the received packet
+                print(f"\n--- Received UDP Packet from {addr} ---")
+                display_packet_info(packet, "Received UDP Packet")  # Display the packet details
                 print("------------------------------\n")
-                sys.stdout.flush()  # Ensure that all output is printed immediately
 
+
+# Function to run the simulation
 def run_simulation():
     """
-    Simulates the full process of generating, sending, and receiving packets.
+    Simulates sending and receiving TCP and UDP packets.
+    This function starts the receivers and sends various data packets (sensor, control, video).
     """
-    # Start a separate thread to receive packets (like a simulated ground station)
-    receiver_thread = threading.Thread(target=receive_packet)
-    receiver_thread.daemon = True  # This ensures the thread stops when the main program exits
-    receiver_thread.start()  # Start the receiver thread
+    # Start threads to receive both TCP and UDP data
+    tcp_receiver_thread = threading.Thread(target=receive_tcp_data)  # Thread to receive TCP data
+    udp_receiver_thread = threading.Thread(target=receive_udp_data)  # Thread to receive UDP data
 
-    time.sleep(1)  # Give the receiver thread a little time to start before sending packets
+    tcp_receiver_thread.daemon = True  # Daemon threads will stop when the main program exits
+    udp_receiver_thread.daemon = True
 
-    # Simulate sending different types of data packets a few times
-    for _ in range(3):  # Run the loop 3 times to show multiple sets of data packets being sent
-        sensor_packet, sensor_label = generate_binary_sensor_data()  # Generate sensor data packet
-        send_packet(sensor_packet)  # Send the sensor data packet
-        time.sleep(1)  # Delay to allow clear printing of the previous packet
+    tcp_receiver_thread.start()  # Start the TCP receiver thread
+    udp_receiver_thread.start()  # Start the UDP receiver thread
 
-        airbrake_packet, airbrake_label = generate_binary_airbrake_status()  # Generate airbrake status packet
-        send_packet(airbrake_packet)  # Send the airbrake status packet
-        time.sleep(1)  # Delay to prevent print overlap
+    time.sleep(1)  # Give the receiver threads time to start before sending packets
 
-        pms_packet, pms_label = generate_binary_pms_data()  # Generate power management system packet
-        send_packet(pms_packet)  # Send the power management system packet
-        time.sleep(1)  # Ensure output clarity
+    # Simulate sending different types of data
+    for _ in range(3):  # Repeat the loop 3 times to send multiple sets of data packets
+        # Sending sensor data over TCP
+        sensor_packet, _ = generate_binary_sensor_data()  # Generate a sensor data packet
+        send_tcp_packet(sensor_packet)  # Send the sensor data over TCP
 
-        fc_packet, fc_label = generate_binary_fc_data()  # Generate flight controller data packet
-        send_packet(fc_packet)  # Send the flight controller data packet
-        time.sleep(1)  # Space out the packet printing
+        # Sending airbrake status over TCP
+        airbrake_packet, _ = generate_binary_airbrake_status()  # Generate airbrake status data
+        send_tcp_packet(airbrake_packet)  # Send the airbrake status over TCP
 
-        video_packet, video_label = generate_binary_video_data()  # Generate video data packet
-        send_packet(video_packet)  # Send the video data packet
-        time.sleep(3)  # Slightly longer delay to simulate real-time transmission
+        # Sending power management data over TCP
+        pms_packet, _ = generate_binary_pms_data()  # Generate power management system (PMS) data
+        send_tcp_packet(pms_packet)  # Send the PMS data over TCP
 
+        # Sending flight controller data over TCP
+        fc_packet, _ = generate_binary_fc_data()  # Generate flight controller data
+        send_tcp_packet(fc_packet)  # Send the flight controller data over TCP
+
+        # Sending video data over UDP
+        video_packet, _ = generate_binary_video_data()  # Generate video data
+        send_udp_packet(video_packet)  # Send the video data over UDP
+
+        time.sleep(3)  # Small delay between sending sets of data to simulate real-time communication
+
+
+# The program starts here
 if __name__ == '__main__':
     run_simulation()  # Start the simulation when the script is executed

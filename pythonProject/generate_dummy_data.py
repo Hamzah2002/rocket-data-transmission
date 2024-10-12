@@ -1,5 +1,4 @@
 import random
-import struct
 from packet import create_packet
 
 
