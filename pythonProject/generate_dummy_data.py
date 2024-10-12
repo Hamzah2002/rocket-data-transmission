@@ -1,6 +1,5 @@
 import random
-
-# Import the create_packet function from packet.py
+import struct
 from packet import create_packet
 
 
@@ -17,12 +16,10 @@ def generate_binary_sensor_data():
     sensor_binary = format(int(sensor_value * 100), '032b')
 
     # Convert the 32-bit binary string into 4 bytes using the 'int.to_bytes' method.
-    # The '2' argument means it interprets the binary string as base 2, and 'byteorder="big"'
-    # ensures the bytes are in big-endian order.
     payload = int(sensor_binary, 2).to_bytes(4, byteorder='big')
 
     # Create a packet using the create_packet function. The data type ID for sensor data is 0x01.
-    return create_packet(0x01, payload)
+    return create_packet(0x01, payload), f"Sensor Data (Temperature: {sensor_value:.2f} °C)"
 
 
 def generate_binary_airbrake_status():
@@ -40,7 +37,7 @@ def generate_binary_airbrake_status():
     payload = int(airbrake_binary, 2).to_bytes(1, byteorder='big')
 
     # Create a packet with data type ID 0x02 (Airbrake Status)
-    return create_packet(0x02, payload)
+    return create_packet(0x02, payload), f"Airbrake Status (Deployed: {airbrake_status}%)"
 
 
 def generate_binary_pms_data():
@@ -58,7 +55,7 @@ def generate_binary_pms_data():
     payload = int(voltage_binary, 2).to_bytes(2, byteorder='big')
 
     # Create a packet with data type ID 0x03 (PMS Data)
-    return create_packet(0x03, payload)
+    return create_packet(0x03, payload), f"PMS Data (Battery Voltage: {voltage} mV)"
 
 
 def generate_binary_fc_data():
@@ -81,7 +78,7 @@ def generate_binary_fc_data():
                int(velocity_binary, 2).to_bytes(4, byteorder='big'))
 
     # Create a packet with data type ID 0x04 (Flight Controller Data)
-    return create_packet(0x04, payload)
+    return create_packet(0x04, payload), f"Flight Controller Data (Altitude: {altitude:.2f} m, Velocity: {velocity:.2f} m/s)"
 
 
 def generate_binary_video_data():
@@ -96,4 +93,4 @@ def generate_binary_video_data():
     payload = int(video_binary, 2).to_bytes(10, byteorder='big')
 
     # Create a packet with data type ID 0x05 (Video Data)
-    return create_packet(0x05, payload)
+    return create_packet(0x05, payload), "Video Data (Dummy 10-byte video frame)"
