@@ -35,7 +35,7 @@ def send_udp_packet(packet, host='localhost', port=54321):
         sock.sendto(packet, (host, port))  # Send the packet using UDP
         with print_lock:
             print("\n--- Sending UDP Packet ---")
-            display_packet_info(packet, "Sent UDP Packet")  # Display packet details
+            display_packet_info(packet, "Sent UDP Packet")  # Display packet details what
             print("--------------------------\n")
 
 
